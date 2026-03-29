@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>N-Body Simulator</title>
+  <script src="/static/js/d3.v7.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0d0d1a;
+      color: #dde;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Left panel ── */
+    #panel {
+      width: 340px;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      background: #13132a;
+      border-right: 1px solid #2a2a4a;
+      overflow-y: auto;
+    }
+
+    #panel-header {
+      padding: 14px 16px 10px;
+      font-size: 17px;
+      font-weight: bold;
+      color: #7ec8e3;
+      border-bottom: 1px solid #2a2a4a;
+      flex-shrink: 0;
+    }
+
+    #panel-header span { font-size: 13px; color: #556; font-weight: normal; margin-left: 6px; }
+
+    .section {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e1e3a;
+    }
+
+    .section-title {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #556;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 7px;
+    }
+
+    .row:last-child { margin-bottom: 0; }
+
+    .lbl {
+      font-size: 11px;
+      color: #8899aa;
+      width: 78px;
+      flex-shrink: 0;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: #7ec8e3;
+      cursor: pointer;
+    }
+
+    .val {
+      font-size: 11px;
+      color: #cce;
+      width: 28px;
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    input[type="number"] {
+      background: #1e1e38;
+      border: 1px solid #3a3a5a;
+      color: #dde;
+      padding: 3px 5px;
+      font-size: 11px;
+      font-family: inherit;
+      width: 70px;
+      border-radius: 3px;
+    }
+
+    input[type="number"]:focus { outline: none; border-color: #7ec8e3; }
+
+    .btn-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 5px;
+    }
+
+    button {
+      padding: 5px 11px;
+      background: #1e1e38;
+      border: 1px solid #3a3a5a;
+      color: #ccd;
+      cursor: pointer;
+      font-size: 12px;
+      font-family: inherit;
+      border-radius: 3px;
+      transition: background 0.15s;
+    }
+
+    button:hover { background: #2a2a4e; }
+    button.running { background: #1a4a2a; border-color: #2a7a3a; color: #7ec87e; }
+
+    /* ── Body table ── */
+    #body-table-wrap {
+      flex: 1;
+      padding: 10px 14px;
+      overflow-y: auto;
+    }
+
+    .section-title2 {
+      font-size: 10px;
+      text-transform: uppercase;
+      color: #556;
+      letter-spacing: 1px;
+      margin-bottom: 6px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 10px;
+    }
+
+    th {
+      background: #1a1a34;
+      padding: 4px 3px;
+      text-align: center;
+      color: #778;
+      font-weight: normal;
+      border-bottom: 1px solid #2a2a4a;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 2px 2px;
+      text-align: center;
+      border-bottom: 1px solid #18182e;
+    }
+
+    td input[type="number"] {
+      width: 48px;
+      padding: 2px 3px;
+      font-size: 10px;
+    }
+
+    .swatch {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      display: inline-block;
+      vertical-align: middle;
+    }
+
+    /* ── Simulation area ── */
+    #sim-wrap {
+      flex: 1;
+      position: relative;
+      background: #050510;
+    }
+
+    #sim-svg {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+
+    .trail { fill: none; }
+
+    .body-circle { cursor: grab; }
+    .body-circle:active { cursor: grabbing; }
+
+    #hud {
+      position: absolute;
+      bottom: 10px;
+      left: 12px;
+      font-size: 10px;
+      color: #446;
+      pointer-events: none;
+    }
+
+    #tooltip {
+      position: absolute;
+      background: rgba(20, 20, 50, 0.92);
+      border: 1px solid #3a3a6a;
+      padding: 5px 8px;
+      font-size: 10px;
+      color: #bbc;
+      border-radius: 4px;
+      pointer-events: none;
+      display: none;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Control panel ── -->
+<div id="panel">
+  <div id="panel-header">⊙ N-Body Simulator <span>drag bodies to move</span></div>
+
+  <!-- Global controls -->
+  <div class="section">
+    <div class="section-title">Simulation</div>
+
+    <div class="row">
+      <span class="lbl">Bodies</span>
+      <input type="range" id="sl-n" min="1" max="20" value="3" />
+      <span class="val" id="sl-n-val">3</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Speed</span>
+      <input type="range" id="sl-speed" min="1" max="15" value="4" />
+      <span class="val" id="sl-speed-val">4</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Trail length</span>
+      <input type="range" id="sl-trail" min="0" max="600" value="120" step="20" />
+      <span class="val" id="sl-trail-val">120</span>
+    </div>
+
+    <div class="row">
+      <span class="lbl">Gravity (G)</span>
+      <input type="number" id="inp-g" value="500" min="1" max="50000" step="50" />
+    </div>
+  </div>
+
+  <!-- Action buttons -->
+  <div class="section">
+    <div class="btn-row">
+      <button id="btn-start">▶ Start</button>
+      <button id="btn-stop">⏸ Pause</button>
+      <button id="btn-reset">↺ Reset</button>
+      <button id="btn-random">⚄ Random</button>
+      <button id="btn-preset">☀ Preset</button>
+    </div>
+  </div>
+
+  <!-- Per-body table -->
+  <div id="body-table-wrap">
+    <div class="section-title2">Bodies — edit values then click Reset to apply</div>
+    <table>
+      <thead>
+        <tr>
+          <th>#</th>
+          <th></th>
+          <th>x</th>
+          <th>y</th>
+          <th>vx</th>
+          <th>vy</th>
+          <th>mass</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ── Simulation canvas ── -->
+<div id="sim-wrap">
+  <svg id="sim-svg">
+    <g id="g-trails"></g>
+    <g id="g-bodies"></g>
+    <g id="g-vectors"></g>
+  </svg>
+  <div id="hud">t = 0.00 s</div>
+  <div id="tooltip"></div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════
+//  N-Body Simulator
+// ═══════════════════════════════════════════
+
+// ── Color palette ──────────────────────────
+const PALETTE = [
+  '#e74c3c','#3498db','#2ecc71','#f39c12','#9b59b6',
+  '#1abc9c','#e67e22','#34495e','#e91e63','#00bcd4',
+  '#cddc39','#ff5722','#607d8b','#8bc34a','#ff9800',
+  '#673ab7','#009688','#f44336','#2196f3','#4caf50'
+];
+
+// ── Physics parameters ──────────────────────
+const SOFTENING = 8;   // pixels — prevents singularity
+const DT = 0.016;      // base time-step (seconds per tick)
+
+let G = 500;
+let stepsPerFrame = 4;
+let trailMaxLen = 120;
+
+// ── State ───────────────────────────────────
+let bodies = [];
+let snapshot = [];    // initial state for reset
+let trails = [];      // trails[i] = [[x,y], ...]
+let simTime = 0;
+let running = false;
+let rafId = null;
+
+// ── SVG / D3 ────────────────────────────────
+const svgEl = document.getElementById('sim-svg');
+const svg = d3.select(svgEl);
+const gTrails  = svg.select('#g-trails');
+const gBodies  = svg.select('#g-bodies');
+const gVectors = svg.select('#g-vectors');
+
+let W = 0, H = 0;
+
+function resize() {
+  const rect = document.getElementById('sim-wrap').getBoundingClientRect();
+  W = rect.width;
+  H = rect.height;
+}
+
+window.addEventListener('resize', resize);
+resize();
+
+// ── Physics ──────────────────────────────────
+function computeAccelerations(bs) {
+  bs.forEach(b => { b.ax = 0; b.ay = 0; });
+  for (let i = 0; i < bs.length; i++) {
+    for (let j = i + 1; j < bs.length; j++) {
+      const dx = bs[j].x - bs[i].x;
+      const dy = bs[j].y - bs[i].y;
+      const dist2 = dx * dx + dy * dy + SOFTENING * SOFTENING;
+      const invDist3 = 1 / (dist2 * Math.sqrt(dist2));
+      const fi = G * bs[j].mass * invDist3;
+      const fj = G * bs[i].mass * invDist3;
+      bs[i].ax += fi * dx;
+      bs[i].ay += fi * dy;
+      bs[j].ax -= fj * dx;
+      bs[j].ay -= fj * dy;
+    }
+  }
+}
+
+// Velocity-Verlet (leapfrog) integration — energy conserving
+function stepVerlet(bs, dt) {
+  computeAccelerations(bs);
+  bs.forEach(b => {
+    b.vx += 0.5 * b.ax * dt;
+    b.vy += 0.5 * b.ay * dt;
+    b.x  += b.vx * dt;
+    b.y  += b.vy * dt;
+  });
+  computeAccelerations(bs);
+  bs.forEach(b => {
+    b.vx += 0.5 * b.ax * dt;
+    b.vy += 0.5 * b.ay * dt;
+  });
+}
+
+function totalEnergy(bs) {
+  let ke = 0, pe = 0;
+  bs.forEach(b => { ke += 0.5 * b.mass * (b.vx * b.vx + b.vy * b.vy); });
+  for (let i = 0; i < bs.length; i++) {
+    for (let j = i + 1; j < bs.length; j++) {
+      const dx = bs[j].x - bs[i].x;
+      const dy = bs[j].y - bs[i].y;
+      pe -= G * bs[i].mass * bs[j].mass / Math.sqrt(dx * dx + dy * dy + SOFTENING * SOFTENING);
+    }
+  }
+  return ke + pe;
+}
+
+// ── Body radius (visual) ─────────────────────
+function bodyR(mass) {
+  return Math.max(4, Math.min(28, 3.5 * Math.pow(mass, 0.4)));
+}
+
+// ── Preset initial conditions ─────────────────
+function presetBodies() {
+  const cx = W / 2, cy = H / 2;
+  const n = +document.getElementById('sl-n').value;
+  const bs = [];
+
+  if (n === 1) {
+    bs.push({ x: cx, y: cy, vx: 0, vy: 0, mass: 200 });
+  } else if (n === 2) {
+    bs.push({ x: cx - 120, y: cy, vx: 0,   vy: -70, mass: 60 });
+    bs.push({ x: cx + 120, y: cy, vx: 0,   vy:  70, mass: 60 });
+  } else if (n === 3) {
+    // Sun + two orbiting planets
+    bs.push({ x: cx,       y: cy,       vx: 0,   vy:  0,  mass: 300 });
+    bs.push({ x: cx + 160, y: cy,       vx: 0,   vy:  48, mass: 8   });
+    bs.push({ x: cx,       y: cy + 240, vx: -35, vy:  0,  mass: 5   });
+  } else {
+    // Central heavy body + ring of lighter ones in circular orbits
+    const centralMass = 400;
+    bs.push({ x: cx, y: cy, vx: 0, vy: 0, mass: centralMass });
+    const ring = n - 1;
+    const r = Math.min(W, H) * 0.28;
+    for (let i = 0; i < ring; i++) {
+      const angle = (2 * Math.PI * i) / ring;
+      const ri = r * (0.5 + 0.5 * (i % 3) / 2);  // vary radius
+      const bx = cx + ri * Math.cos(angle);
+      const by = cy + ri * Math.sin(angle);
+      const v = Math.sqrt(G * centralMass / ri);
+      bs.push({
+        x: bx, y: by,
+        vx: -v * Math.sin(angle),
+        vy:  v * Math.cos(angle),
+        mass: 5 + (i % 4) * 5
+      });
+    }
+  }
+
+  return bs.map((b, i) => ({ ...b, id: i, color: PALETTE[i % PALETTE.length] }));
+}
+
+function randomBodies() {
+  const n = +document.getElementById('sl-n').value;
+  const cx = W / 2, cy = H / 2;
+  return Array.from({ length: n }, (_, i) => ({
+    id: i,
+    color: PALETTE[i % PALETTE.length],
+    x:    cx + (Math.random() - 0.5) * W * 0.55,
+    y:    cy + (Math.random() - 0.5) * H * 0.55,
+    vx:   (Math.random() - 0.5) * 120,
+    vy:   (Math.random() - 0.5) * 120,
+    mass: 10 + Math.random() * 90
+  }));
+}
+
+// ── Save / restore snapshot ───────────────────
+function saveSnapshot() {
+  snapshot = bodies.map(b => ({ ...b }));
+}
+
+function restoreSnapshot() {
+  bodies = snapshot.map(b => ({ ...b }));
+}
+
+// ── Body table ────────────────────────────────
+function buildTable() {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  bodies.forEach((b, i) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${i + 1}</td>
+      <td><span class="swatch" style="background:${b.color}"></span></td>
+      <td><input type="number" data-i="${i}" data-f="x"    value="${Math.round(b.x)}"      step="1"></td>
+      <td><input type="number" data-i="${i}" data-f="y"    value="${Math.round(b.y)}"      step="1"></td>
+      <td><input type="number" data-i="${i}" data-f="vx"   value="${b.vx.toFixed(1)}"     step="1"></td>
+      <td><input type="number" data-i="${i}" data-f="vy"   value="${b.vy.toFixed(1)}"     step="1"></td>
+      <td><input type="number" data-i="${i}" data-f="mass" value="${b.mass.toFixed(1)}" min="0.1" step="1"></td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  tbody.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('change', () => {
+      const idx = +inp.dataset.i;
+      const field = inp.dataset.f;
+      bodies[idx][field] = parseFloat(inp.value) || 0;
+      saveSnapshot();
+      renderBodies();
+    });
+  });
+}
+
+function refreshTablePositions() {
+  document.querySelectorAll('#tbody input').forEach(inp => {
+    if (document.activeElement === inp) return;
+    const idx = +inp.dataset.i;
+    if (!bodies[idx]) return;
+    const f = inp.dataset.f;
+    if (f === 'x') inp.value = Math.round(bodies[idx].x);
+    if (f === 'y') inp.value = Math.round(bodies[idx].y);
+  });
+}
+
+// ── D3 rendering ─────────────────────────────
+function renderBodies() {
+  const circles = gBodies.selectAll('.body-circle')
+    .data(bodies, d => d.id);
+
+  const entered = circles.enter()
+    .append('circle')
+    .attr('class', 'body-circle')
+    .attr('stroke', '#ffffff44')
+    .attr('stroke-width', 1)
+    .call(
+      d3.drag()
+        .on('drag', (event, d) => {
+          d.x  = event.x;
+          d.y  = event.y;
+          // Reset velocity on drag — represents an external intervention (energy not conserved)
+          d.vx = 0;
+          d.vy = 0;
+          renderBodies();
+          refreshTablePositions();
+        })
+        .on('end', (_, d) => {
+          saveSnapshot();
+          buildTable();
+        })
+    )
+    .on('mouseover', (event, d) => {
+      const tip = document.getElementById('tooltip');
+      tip.style.display = 'block';
+      tip.innerHTML = `
+        <b>Body ${d.id + 1}</b><br>
+        pos (${Math.round(d.x)}, ${Math.round(d.y)})<br>
+        vel (${d.vx.toFixed(1)}, ${d.vy.toFixed(1)})<br>
+        mass ${d.mass.toFixed(1)}
+      `;
+    })
+    .on('mousemove', event => {
+      const tip = document.getElementById('tooltip');
+      const rect = document.getElementById('sim-wrap').getBoundingClientRect();
+      tip.style.left = (event.clientX - rect.left + 12) + 'px';
+      tip.style.top  = (event.clientY - rect.top  - 10) + 'px';
+    })
+    .on('mouseout', () => {
+      document.getElementById('tooltip').style.display = 'none';
+    });
+
+  circles.merge(entered)
+    .attr('fill',  d => d.color)
+    .attr('r',     d => bodyR(d.mass))
+    .attr('cx',    d => d.x)
+    .attr('cy',    d => d.y);
+
+  circles.exit().remove();
+}
+
+function updateTrails() {
+  if (trailMaxLen === 0) {
+    gTrails.selectAll('.trail').remove();
+    trails = [];
+    return;
+  }
+
+  bodies.forEach((b, i) => {
+    if (!trails[i]) trails[i] = [];
+    trails[i].push([b.x, b.y]);
+    if (trails[i].length > trailMaxLen) trails[i].shift();
+  });
+
+  const line = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom);
+
+  const paths = gTrails.selectAll('.trail').data(bodies, d => d.id);
+
+  paths.enter()
+    .append('path')
+    .attr('class', 'trail')
+    .merge(paths)
+    .attr('stroke', d => d.color)
+    .attr('stroke-width', 1.5)
+    .attr('stroke-opacity', 0.45)
+    .attr('d', (d, i) => trails[i] && trails[i].length > 1 ? line(trails[i]) : null);
+
+  paths.exit().remove();
+}
+
+// ── Animation loop ────────────────────────────
+function tick() {
+  if (!running) return;
+  G = parseFloat(document.getElementById('inp-g').value) || 500;
+
+  for (let s = 0; s < stepsPerFrame; s++) {
+    stepVerlet(bodies, DT);
+    simTime += DT;
+  }
+
+  updateTrails();
+  renderBodies();
+  refreshTablePositions();
+
+  document.getElementById('hud').textContent =
+    `t = ${simTime.toFixed(2)} s  |  E = ${totalEnergy(bodies).toFixed(0)}  |  n = ${bodies.length}`;
+
+  rafId = requestAnimationFrame(tick);
+}
+
+// ── UI wiring ─────────────────────────────────
+function stopSim() {
+  running = false;
+  document.getElementById('btn-start').classList.remove('running');
+  if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
+}
+
+document.getElementById('btn-start').addEventListener('click', () => {
+  if (running) return;
+  running = true;
+  document.getElementById('btn-start').classList.add('running');
+  tick();
+});
+
+document.getElementById('btn-stop').addEventListener('click', stopSim);
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  stopSim();
+  simTime = 0;
+  trails = [];
+  gTrails.selectAll('.trail').remove();
+  restoreSnapshot();
+  renderBodies();
+  buildTable();
+  document.getElementById('hud').textContent = 't = 0.00 s';
+});
+
+document.getElementById('btn-random').addEventListener('click', () => {
+  stopSim();
+  simTime = 0;
+  trails = [];
+  gTrails.selectAll('.trail').remove();
+  bodies = randomBodies();
+  saveSnapshot();
+  renderBodies();
+  buildTable();
+  document.getElementById('hud').textContent = 't = 0.00 s';
+});
+
+document.getElementById('btn-preset').addEventListener('click', () => {
+  stopSim();
+  simTime = 0;
+  trails = [];
+  gTrails.selectAll('.trail').remove();
+  bodies = presetBodies();
+  saveSnapshot();
+  renderBodies();
+  buildTable();
+  document.getElementById('hud').textContent = 't = 0.00 s';
+});
+
+// ── Sliders ───────────────────────────────────
+document.getElementById('sl-n').addEventListener('input', function () {
+  document.getElementById('sl-n-val').textContent = this.value;
+});
+
+document.getElementById('sl-speed').addEventListener('input', function () {
+  stepsPerFrame = +this.value;
+  document.getElementById('sl-speed-val').textContent = this.value;
+});
+
+document.getElementById('sl-trail').addEventListener('input', function () {
+  trailMaxLen = +this.value;
+  document.getElementById('sl-trail-val').textContent = this.value;
+  trails = [];
+});
+
+// ── Init ──────────────────────────────────────
+function init() {
+  resize();
+  bodies = presetBodies();
+  saveSnapshot();
+  renderBodies();
+  buildTable();
+}
+
+// Wait one frame for layout to settle
+requestAnimationFrame(() => requestAnimationFrame(init));
+</script>
+</body>
+</html>
