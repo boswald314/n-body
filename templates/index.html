@@ -700,6 +700,16 @@ document.getElementById('btn-preset').addEventListener('click', () => {
 // ── Sliders ───────────────────────────────────
 document.getElementById('sl-n').addEventListener('input', function () {
   document.getElementById('sl-n-val').textContent = this.value;
+  stopSim();
+  simTime = 0;
+  trails = [];
+  gTrails.selectAll('.trail').remove();
+  bodies = presetBodies();
+  saveSnapshot();
+  renderBodies();
+  updateViewport();
+  buildTable();
+  document.getElementById('hud').textContent = 't = 0.00 s';
 });
 
 document.getElementById('sl-speed').addEventListener('input', function () {
