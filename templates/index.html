@@ -251,6 +251,11 @@
       <button id="btn-random">⚄ Random</button>
       <button id="btn-preset">☀ Preset</button>
     </div>
+    <div class="btn-row" style="margin-top:5px;">
+      <button id="btn-zoom-in">+ Zoom</button>
+      <button id="btn-zoom-out">− Zoom</button>
+      <button id="btn-track" class="running">◎ Track CoM</button>
+    </div>
   </div>
 
   <!-- Per-body table -->
@@ -276,9 +281,11 @@
 <!-- ── Simulation canvas ── -->
 <div id="sim-wrap">
   <svg id="sim-svg">
-    <g id="g-trails"></g>
-    <g id="g-bodies"></g>
-    <g id="g-vectors"></g>
+    <g id="g-viewport">
+      <g id="g-trails"></g>
+      <g id="g-bodies"></g>
+      <g id="g-vectors"></g>
+    </g>
   </svg>
   <div id="hud">t = 0.00 s</div>
   <div id="tooltip"></div>
@@ -313,12 +320,18 @@ let simTime = 0;
 let running = false;
 let rafId = null;
 
+// ── Camera / viewport ───────────────────────
+let zoomLevel = 1;
+let trackCoM = true;
+let camX = 0, camY = 0;
+
 // ── SVG / D3 ────────────────────────────────
 const svgEl = document.getElementById('sim-svg');
 const svg = d3.select(svgEl);
-const gTrails  = svg.select('#g-trails');
-const gBodies  = svg.select('#g-bodies');
-const gVectors = svg.select('#g-vectors');
+const gViewport = svg.select('#g-viewport');
+const gTrails  = gViewport.select('#g-trails');
+const gBodies  = gViewport.select('#g-bodies');
+const gVectors = gViewport.select('#g-vectors');
 
 let W = 0, H = 0;
 
@@ -328,7 +341,7 @@ function resize() {
   H = rect.height;
 }
 
-window.addEventListener('resize', resize);
+window.addEventListener('resize', () => { resize(); updateViewport(); });
 resize();
 
 // ── Physics ──────────────────────────────────
@@ -487,6 +500,35 @@ function refreshTablePositions() {
   });
 }
 
+// ── Center of mass & viewport transform ──────
+function computeCoM() {
+  let totalMass = 0, cx = 0, cy = 0;
+  bodies.forEach(b => {
+    totalMass += b.mass;
+    cx += b.x * b.mass;
+    cy += b.y * b.mass;
+  });
+  if (totalMass === 0) {
+    if (bodies.length === 0) return { x: W / 2, y: H / 2 };
+    // Zero-mass fallback: geometric centroid
+    const n = bodies.length;
+    return { x: bodies.reduce((s, b) => s + b.x, 0) / n,
+             y: bodies.reduce((s, b) => s + b.y, 0) / n };
+  }
+  return { x: cx / totalMass, y: cy / totalMass };
+}
+
+function updateViewport() {
+  if (trackCoM && bodies.length > 0) {
+    const com = computeCoM();
+    camX = com.x;
+    camY = com.y;
+  }
+  gViewport.attr('transform',
+    `translate(${W / 2}, ${H / 2}) scale(${zoomLevel}) translate(${-camX}, ${-camY})`
+  );
+}
+
 // ── D3 rendering ─────────────────────────────
 function renderBodies() {
   const circles = gBodies.selectAll('.body-circle')
@@ -583,10 +625,11 @@ function tick() {
 
   updateTrails();
   renderBodies();
+  updateViewport();
   refreshTablePositions();
 
   document.getElementById('hud').textContent =
-    `t = ${simTime.toFixed(2)} s  |  E = ${totalEnergy(bodies).toFixed(0)}  |  n = ${bodies.length}`;
+    `t = ${simTime.toFixed(2)} s  |  E = ${totalEnergy(bodies).toFixed(0)}  |  n = ${bodies.length}  |  zoom ${zoomLevel.toFixed(2)}x`;
 
   rafId = requestAnimationFrame(tick);
 }
@@ -611,9 +654,13 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   stopSim();
   simTime = 0;
   trails = [];
+  zoomLevel = 1;
+  trackCoM = true;
+  document.getElementById('btn-track').classList.add('running');
   gTrails.selectAll('.trail').remove();
   restoreSnapshot();
   renderBodies();
+  updateViewport();
   buildTable();
   document.getElementById('hud').textContent = 't = 0.00 s';
 });
@@ -622,10 +669,14 @@ document.getElementById('btn-random').addEventListener('click', () => {
   stopSim();
   simTime = 0;
   trails = [];
+  zoomLevel = 1;
+  trackCoM = true;
+  document.getElementById('btn-track').classList.add('running');
   gTrails.selectAll('.trail').remove();
   bodies = randomBodies();
   saveSnapshot();
   renderBodies();
+  updateViewport();
   buildTable();
   document.getElementById('hud').textContent = 't = 0.00 s';
 });
@@ -634,10 +685,14 @@ document.getElementById('btn-preset').addEventListener('click', () => {
   stopSim();
   simTime = 0;
   trails = [];
+  zoomLevel = 1;
+  trackCoM = true;
+  document.getElementById('btn-track').classList.add('running');
   gTrails.selectAll('.trail').remove();
   bodies = presetBodies();
   saveSnapshot();
   renderBodies();
+  updateViewport();
   buildTable();
   document.getElementById('hud').textContent = 't = 0.00 s';
 });
@@ -658,12 +713,37 @@ document.getElementById('sl-trail').addEventListener('input', function () {
   trails = [];
 });
 
+// ── Zoom & tracking ──────────────────────────
+document.getElementById('btn-zoom-in').addEventListener('click', () => {
+  zoomLevel = Math.min(zoomLevel * 1.25, 20);
+  updateViewport();
+});
+
+document.getElementById('btn-zoom-out').addEventListener('click', () => {
+  zoomLevel = Math.max(zoomLevel / 1.25, 0.05);
+  updateViewport();
+});
+
+document.getElementById('btn-track').addEventListener('click', () => {
+  trackCoM = !trackCoM;
+  document.getElementById('btn-track').classList.toggle('running', trackCoM);
+  if (trackCoM) updateViewport();
+});
+
+svgEl.addEventListener('wheel', (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 1 / 1.1;
+  zoomLevel = Math.max(0.05, Math.min(20, zoomLevel * factor));
+  updateViewport();
+}, { passive: false });
+
 // ── Init ──────────────────────────────────────
 function init() {
   resize();
   bodies = presetBodies();
   saveSnapshot();
   renderBodies();
+  updateViewport();
   buildTable();
 }
 
