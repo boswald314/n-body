@@ -119,6 +119,7 @@
     /* ── Body table ── */
     #body-table-wrap {
       flex: 1;
+      min-height: 120px;
       padding: 10px 14px;
       overflow-y: auto;
     }
@@ -495,8 +496,10 @@ function refreshTablePositions() {
     const idx = +inp.dataset.i;
     if (!bodies[idx]) return;
     const f = inp.dataset.f;
-    if (f === 'x') inp.value = Math.round(bodies[idx].x);
-    if (f === 'y') inp.value = Math.round(bodies[idx].y);
+    if (f === 'x')  inp.value = Math.round(bodies[idx].x);
+    if (f === 'y')  inp.value = Math.round(bodies[idx].y);
+    if (f === 'vx') inp.value = bodies[idx].vx.toFixed(1);
+    if (f === 'vy') inp.value = bodies[idx].vy.toFixed(1);
   });
 }
 
