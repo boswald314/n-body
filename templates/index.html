@@ -316,7 +316,7 @@ let trailMaxLen = 120;
 // ── State ───────────────────────────────────
 let bodies = [];
 let snapshot = [];    // initial state for reset
-let trails = [];      // trails[i] = [[x,y], ...]
+let trails = {};      // trails[bodyId] = [[x,y], ...]
 let simTime = 0;
 let running = false;
 let rafId = null;
@@ -590,14 +590,14 @@ function renderBodies() {
 function updateTrails() {
   if (trailMaxLen === 0) {
     gTrails.selectAll('.trail').remove();
-    trails = [];
+    trails = {};
     return;
   }
 
-  bodies.forEach((b, i) => {
-    if (!trails[i]) trails[i] = [];
-    trails[i].push([b.x, b.y]);
-    if (trails[i].length > trailMaxLen) trails[i].shift();
+  bodies.forEach(b => {
+    if (!trails[b.id]) trails[b.id] = [];
+    trails[b.id].push([b.x, b.y]);
+    if (trails[b.id].length > trailMaxLen) trails[b.id].shift();
   });
 
   const line = d3.line().x(d => d[0]).y(d => d[1]).curve(d3.curveCatmullRom);
@@ -611,7 +611,7 @@ function updateTrails() {
     .attr('stroke', d => d.color)
     .attr('stroke-width', 1.5)
     .attr('stroke-opacity', 0.45)
-    .attr('d', (d, i) => trails[i] && trails[i].length > 1 ? line(trails[i]) : null);
+    .attr('d', d => trails[d.id] && trails[d.id].length > 1 ? line(trails[d.id]) : null);
 
   paths.exit().remove();
 }
@@ -656,7 +656,7 @@ document.getElementById('btn-stop').addEventListener('click', stopSim);
 document.getElementById('btn-reset').addEventListener('click', () => {
   stopSim();
   simTime = 0;
-  trails = [];
+  trails = {};
   zoomLevel = 1;
   trackCoM = true;
   document.getElementById('btn-track').classList.add('running');
@@ -671,7 +671,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 document.getElementById('btn-random').addEventListener('click', () => {
   stopSim();
   simTime = 0;
-  trails = [];
+  trails = {};
   zoomLevel = 1;
   trackCoM = true;
   document.getElementById('btn-track').classList.add('running');
@@ -687,7 +687,7 @@ document.getElementById('btn-random').addEventListener('click', () => {
 document.getElementById('btn-preset').addEventListener('click', () => {
   stopSim();
   simTime = 0;
-  trails = [];
+  trails = {};
   zoomLevel = 1;
   trackCoM = true;
   document.getElementById('btn-track').classList.add('running');
@@ -705,7 +705,7 @@ document.getElementById('sl-n').addEventListener('input', function () {
   document.getElementById('sl-n-val').textContent = this.value;
   stopSim();
   simTime = 0;
-  trails = [];
+  trails = {};
   gTrails.selectAll('.trail').remove();
   bodies = presetBodies();
   saveSnapshot();
@@ -723,7 +723,7 @@ document.getElementById('sl-speed').addEventListener('input', function () {
 document.getElementById('sl-trail').addEventListener('input', function () {
   trailMaxLen = +this.value;
   document.getElementById('sl-trail-val').textContent = this.value;
-  trails = [];
+  trails = {};
 });
 
 // ── Zoom & tracking ──────────────────────────
